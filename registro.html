@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Registro</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+<header>
+    <h1>Crear cuenta</h1>
+</header>
+
+<main>
+
+    <form id="formRegistro">
+
+        <input
+            type="text"
+            id="nombre"
+            placeholder="Nombre"
+            required
+        >
+
+        <input
+            type="email"
+            id="email"
+            placeholder="Email"
+            required
+        >
+
+        <input
+            type="password"
+            id="password"
+            placeholder="Contraseña"
+            required
+        >
+
+        <button type="submit">
+            Registrarse
+        </button>
+
+    </form>
+
+    <p id="mensaje"></p>
+
+</main>
+
+<script>
+
+document.getElementById("formRegistro").addEventListener(
+    "submit",
+    async function(event) {
+
+        event.preventDefault();
+
+        const datos = {
+
+            nombre: document.getElementById("nombre").value,
+
+            email: document.getElementById("email").value,
+
+            password: document.getElementById("password").value
+
+        };
+
+        const respuesta = await fetch(
+            "http://127.0.0.1:8000/clientes",
+            {
+                method: "POST",
+
+                headers: {
+                    "Content-Type": "application/json"
+                },
+
+                body: JSON.stringify(datos)
+            }
+        );
+
+        const resultado = await respuesta.json();
+
+        document.getElementById("mensaje").textContent =
+            resultado.mensaje || resultado.error;
+
+    }
+);
+
+</script>
+
+</body>
+</html>
