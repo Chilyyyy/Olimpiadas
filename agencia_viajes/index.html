@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Portal de venta de paquetes turísticos">
+  <title>Horizonte Travel | Paquetes de viaje</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="navbar">
+    <a href="#inicio" class="brand"><span class="brand-mark">H</span><span>HORIZONTE<span class="brand-light">TRAVEL</span></span></a>
+    <button class="menu-toggle" id="menuToggle" aria-label="Abrir menú">☰</button>
+    <nav id="mainMenu">
+      <a href="#inicio">Inicio</a>
+      <a href="#destinos">Destinos</a>
+      <a href="#servicios">Servicios</a>
+      <a href="#contacto">Contacto</a>
+      <button class="account-btn" id="accountBtn">Iniciar sesión</button>
+      <button class="cart-btn" id="cartBtn">Carrito <span id="cartCount">0</span></button>
+    </nav>
+  </header>
+
+  <main>
+    <section id="inicio" class="hero">
+      <div class="hero-overlay"></div>
+      <div class="hero-content">
+        <span class="kicker">TU PRÓXIMO DESTINO EMPIEZA ACÁ</span>
+        <h1>Viajá lejos.<br><em>Viví más.</em></h1>
+        <p>Descubrí destinos únicos, elegí tus paquetes y armá tu viaje a tu medida.</p>
+        <div class="hero-actions">
+          <a href="#destinos" class="primary-btn">Explorar destinos</a>
+          <button class="secondary-btn" id="heroCartBtn">Ver carrito</button>
+        </div>
+      </div>
+      <div class="hero-badge"><strong>+20</strong><span>destinos<br>disponibles</span></div>
+    </section>
+
+    <section id="destinos" class="destinations section">
+      <div class="section-head">
+        <div>
+          <span class="kicker dark">PAQUETES TURÍSTICOS</span>
+          <h2>Elegí tu próxima aventura</h2>
+        </div>
+        <p>Podés agregar varios viajes al carrito. La cantidad de pasajes y el precio total se acumulan automáticamente.</p>
+      </div>
+
+      <div class="carousel-wrap">
+        <button class="carousel-arrow" id="prevSlide" aria-label="Destino anterior">‹</button>
+        <div class="carousel-window">
+          <div class="carousel-track" id="carouselTrack">
+            <section class="slide">
+              <div class="slide-intro japan">
+                <span>01</span><h3>Asia</h3><p>Tradición, tecnología y paisajes increíbles.</p>
+              </div>
+              <div class="cards">
+                <article class="trip-card">
+                  <div class="trip-photo japan-photo"><span>JAPÓN</span></div>
+                  <div class="trip-body">
+                    <div class="trip-top"><span class="country">TOKIO · 7 DÍAS</span><span class="rating">★ 4.9</span></div>
+                    <h3>Tokio esencial</h3>
+                    <p>Hotel 4 estrellas, desayuno, traslados y city tour.</p>
+                    <div class="trip-bottom"><strong>$1.850.000 <small>/ pasaje</small></strong><button class="add-btn" data-id="tokio">+ Agregar</button></div>
+                  </div>
+                </article>
+                <article class="trip-card">
+                  <div class="trip-photo korea-photo"><span>COREA DEL SUR</span></div>
+                  <div class="trip-body">
+                    <div class="trip-top"><span class="country">SEÚL · 6 DÍAS</span><span class="rating">★ 4.8</span></div>
+                    <h3>Seúl cultural</h3>
+                    <p>Hotel, desayuno, palacios históricos y paseo nocturno.</p>
+                    <div class="trip-bottom"><strong>$1.620.000 <small>/ pasaje</small></strong><button class="add-btn" data-id="seul">+ Agregar</button></div>
+                  </div>
+                </article>
+              </div>
+            </section>
+
+            <section class="slide">
+              <div class="slide-intro europe">
+                <span>02</span><h3>Europa</h3><p>Historia, gastronomía y ciudades inolvidables.</p>
+              </div>
+              <div class="cards">
+                <article class="trip-card">
+                  <div class="trip-photo italy-photo"><span>ITALIA</span></div>
+                  <div class="trip-body">
+                    <div class="trip-top"><span class="country">ROMA · 8 DÍAS</span><span class="rating">★ 4.9</span></div>
+                    <h3>Roma histórica</h3>
+                    <p>Alojamiento céntrico, desayuno y visitas guiadas.</p>
+                    <div class="trip-bottom"><strong>$1.480.000 <small>/ pasaje</small></strong><button class="add-btn" data-id="roma">+ Agregar</button></div>
+                  </div>
+                </article>
+                <article class="trip-card">
+                  <div class="trip-photo greece-photo"><span>GRECIA</span></div>
+                  <div class="trip-body">
+                    <div class="trip-top"><span class="country">ATENAS · 7 DÍAS</span><span class="rating">★ 4.8</span></div>
+                    <h3>Islas griegas</h3>
+                    <p>Hotel, desayuno, excursión y navegación entre islas.</p>
+                    <div class="trip-bottom"><strong>$1.690.000 <small>/ pasaje</small></strong><button class="add-btn" data-id="atenas">+ Agregar</button></div>
+                  </div>
+                </article>
+              </div>
+            </section>
+
+            <section class="slide">
+              <div class="slide-intro nature">
+                <span>03</span><h3>Aventura</h3><p>Naturaleza, aventura y experiencias diferentes.</p>
+              </div>
+              <div class="cards">
+                <article class="trip-card">
+                  <div class="trip-photo egypt-photo"><span>EGIPTO</span></div>
+                  <div class="trip-body">
+                    <div class="trip-top"><span class="country">EL CAIRO · 6 DÍAS</span><span class="rating">★ 4.7</span></div>
+                    <h3>Egipto milenario</h3>
+                    <p>Hotel, desayuno, pirámides, museo y excursión al Nilo.</p>
+                    <div class="trip-bottom"><strong>$1.330.000 <small>/ pasaje</small></strong><button class="add-btn" data-id="egipto">+ Agregar</button></div>
+                  </div>
+                </article>
+                <article class="trip-card">
+                  <div class="trip-photo peru-photo"><span>PERÚ</span></div>
+                  <div class="trip-body">
+                    <div class="trip-top"><span class="country">CUSCO · 5 DÍAS</span><span class="rating">★ 4.9</span></div>
+                    <h3>Ruta del Cusco</h3>
+                    <p>Hotel, desayuno, excursiones y visita a Machu Picchu.</p>
+                    <div class="trip-bottom"><strong>$980.000 <small>/ pasaje</small></strong><button class="add-btn" data-id="cusco">+ Agregar</button></div>
+                  </div>
+                </article>
+              </div>
+            </section>
+
+            <section class="slide">
+              <div class="slide-intro america">
+                <span>04</span><h3>América</h3><p>Playas, cultura y grandes ciudades.</p>
+              </div>
+              <div class="cards">
+                <article class="trip-card">
+                  <div class="trip-photo brazil-photo"><span>BRASIL</span></div>
+                  <div class="trip-body">
+                    <div class="trip-top"><span class="country">RÍO · 6 DÍAS</span><span class="rating">★ 4.8</span></div>
+                    <h3>Río de Janeiro</h3>
+                    <p>Hotel cerca de la playa, desayuno y excursiones.</p>
+                    <div class="trip-bottom"><strong>$760.000 <small>/ pasaje</small></strong><button class="add-btn" data-id="rio">+ Agregar</button></div>
+                  </div>
+                </article>
+                <article class="trip-card">
+                  <div class="trip-photo mexico-photo"><span>MÉXICO</span></div>
+                  <div class="trip-body">
+                    <div class="trip-top"><span class="country">CANCÚN · 7 DÍAS</span><span class="rating">★ 4.9</span></div>
+                    <h3>Cancún Caribe</h3>
+                    <p>Resort, desayuno, playa y excursión de snorkel.</p>
+                    <div class="trip-bottom"><strong>$1.120.000 <small>/ pasaje</small></strong><button class="add-btn" data-id="cancun">+ Agregar</button></div>
+                  </div>
+                </article>
+              </div>
+            </section>
+          </div>
+        </div>
+        <button class="carousel-arrow" id="nextSlide" aria-label="Siguiente destino">›</button>
+      </div>
+      <div class="dots" id="dots"></div>
+    </section>
+
+    <section id="servicios" class="services section">
+      <div class="section-head centered">
+        <div><span class="kicker dark">SERVICIOS</span><h2>Todo para viajar tranquilo</h2></div>
+      </div>
+      <div class="service-grid">
+        <article><span>01</span><h3>Vuelos</h3><p>Opciones de vuelos de ida y vuelta para tus destinos.</p></article>
+        <article><span>02</span><h3>Alojamiento</h3><p>Hoteles y resorts seleccionados para cada paquete.</p></article>
+        <article><span>03</span><h3>Excursiones</h3><p>Experiencias locales y recorridos para aprovechar cada día.</p></article>
+        <article><span>04</span><h3>Traslados</h3><p>Traslados coordinados desde el aeropuerto hasta tu alojamiento.</p></article>
+      </div>
+    </section>
+
+    <section id="contacto" class="contact section">
+      <div><span class="kicker">CONTACTO</span><h2>¿Listo para viajar?</h2><p>Armá tu carrito y, cuando quieras confirmar la compra, iniciá sesión o creá tu cuenta.</p></div>
+      <div class="contact-card"><strong>HORIZONTE TRAVEL</strong><span>hola@horizontetravel.com</span><span>+54 11 5555-2026</span><span>Buenos Aires, Argentina</span></div>
+    </section>
+  </main>
+
+  <footer><span>© 2026 Horizonte Travel</span><span>Viajes · Experiencias · Destinos</span></footer>
+
+  <!-- CARRITO -->
+  <div class="modal-backdrop hidden" id="cartModal">
+    <aside class="cart-panel">
+      <div class="modal-header"><div><span class="kicker dark">TU RESERVA</span><h2>Carrito</h2></div><button class="close-btn" id="closeCart">×</button></div>
+      <div id="cartItems" class="cart-items"></div>
+      <div class="cart-summary"><span>Total</span><strong id="cartTotal">$0</strong></div>
+      <button class="primary-btn full" id="checkoutBtn">Continuar al pago</button>
+      <button class="text-btn" id="clearCart">Vaciar carrito</button>
+    </aside>
+  </div>
+
+  <!-- CUENTA / LOGIN -->
+  <div class="modal-backdrop hidden" id="accountModal">
+    <div class="account-modal">
+      <button class="close-btn" id="closeAccount">×</button>
+      <div class="account-tabs"><button class="tab active" data-tab="login">Iniciar sesión</button><button class="tab" data-tab="register">Crear cuenta</button></div>
+      <div id="loginPanel">
+        <span class="kicker dark">CUENTA</span><h2>Bienvenido de nuevo</h2><p>Tu cuenta solo es necesaria al momento de confirmar el pago.</p>
+        <form id="loginForm">
+          <label>Email</label><input id="loginEmail" type="email" placeholder="tu@email.com" required>
+          <label>Contraseña</label><input id="loginPassword" type="password" placeholder="••••••••" required>
+          <button class="primary-btn full" type="submit">Iniciar sesión</button><p class="form-message" id="loginMessage"></p>
+        </form>
+      </div>
+      <div id="registerPanel" class="hidden">
+        <span class="kicker dark">NUEVO VIAJERO</span><h2>Creá tu cuenta</h2><p>Registrate para poder confirmar tus compras.</p>
+        <form id="registerForm">
+          <label>Nombre</label><input id="registerName" type="text" placeholder="Tu nombre" required>
+          <label>Email</label><input id="registerEmail" type="email" placeholder="tu@email.com" required>
+          <label>Contraseña</label><input id="registerPassword" type="password" minlength="4" placeholder="Mínimo 4 caracteres" required>
+          <button class="primary-btn full" type="submit">Registrarme</button><p class="form-message" id="registerMessage"></p>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONFIRMACIÓN DE PAGO -->
+  <div class="modal-backdrop hidden" id="paymentModal">
+    <div class="payment-modal">
+      <button class="close-btn" id="closePayment">×</button>
+      <span class="kicker dark">PAGO</span><h2>Confirmar compra</h2>
+      <p>Estás por reservar los siguientes viajes:</p>
+      <div id="paymentSummary" class="payment-summary"></div>
+      <div class="payment-total"><span>Total a pagar</span><strong id="paymentTotal">$0</strong></div>
+      <button class="primary-btn full" id="finishPayment">Confirmar reserva</button>
+      <p class="secure-note">✓ Simulación de compra para el proyecto web</p>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <script src="script.js"></script>
+</body>
+</html>
