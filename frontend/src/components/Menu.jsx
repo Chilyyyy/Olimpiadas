@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+// Barra de arriba con el menú.
+import { useState } from 'react';
 
 export default function Menu({ user, cartCount, onOpenAccount, onOpenCart }) {
   const [open, setOpen] = useState(false);

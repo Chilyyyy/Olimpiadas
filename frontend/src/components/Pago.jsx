@@ -1,14 +1,14 @@
-// Resumen para confirmar la compra.
-import { trips, money } from '../datos.js';
+// Muestra el resumen antes de abrir el checkout de Mercado Pago.
+import { money } from '../datos.js';
 
-export default function Pago({ cart, total, onClose, onConfirm }) {
+export default function Pago({ cart, trips, total, busy, error, onClose, onConfirm }) {
   return (
     <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="payment-modal">
         <button className="close-btn" onClick={onClose}>×</button>
-        <span className="kicker dark">PAGO</span>
-        <h2>Confirmar compra</h2>
-        <p>Estás por reservar los siguientes viajes:</p>
+        <span className="kicker dark">MERCADO PAGO</span>
+        <h2>Continuar con el pago</h2>
+        <p>Revisá tu reserva. Para pagar, te llevaremos al checkout seguro de Mercado Pago.</p>
         <div className="payment-summary">
           {Object.entries(cart).map(([id, qty]) => (
             <div className="payment-line" key={id}>
@@ -18,8 +18,11 @@ export default function Pago({ cart, total, onClose, onConfirm }) {
           ))}
         </div>
         <div className="payment-total"><span>Total a pagar</span><strong>{money(total)}</strong></div>
-        <button className="primary-btn full" onClick={onConfirm}>Confirmar reserva</button>
-        <p className="secure-note">✓ Simulación de compra para el proyecto web</p>
+        {error && <p className="form-message">{error}</p>}
+        <button className="primary-btn full" onClick={onConfirm} disabled={busy}>
+          {busy ? 'Conectando con Mercado Pago...' : 'Ir a Mercado Pago'}
+        </button>
+        <p className="secure-note">✓ El pago se procesa en Mercado Pago</p>
       </div>
     </div>
   );

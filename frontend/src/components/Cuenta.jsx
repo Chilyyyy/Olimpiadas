@@ -7,25 +7,40 @@ export default function Cuenta({ user, onClose, onRegister, onLogin }) {
   const [register, setRegister] = useState({ name: '', email: '', password: '' });
   const [loginMsg, setLoginMsg] = useState('');
   const [registerMsg, setRegisterMsg] = useState('');
+  const [busy, setBusy] = useState(false);
 
-  const handleRegister = e => {
+  const handleRegister = async e => {
     e.preventDefault();
-    if (register.password.length < 4) {
-      setRegisterMsg('La contraseña debe tener al menos 4 caracteres.');
+    if (register.password.length < 8) {
+      setRegisterMsg('La contraseña debe tener al menos 8 caracteres.');
       return;
     }
-    onRegister({
-      name: register.name.trim(),
-      email: register.email.trim().toLowerCase(),
-      password: register.password
-    });
-    setRegisterMsg('Cuenta creada correctamente.');
+    setBusy(true);
+    try {
+      await onRegister({
+        name: register.name.trim(),
+        email: register.email.trim().toLowerCase(),
+        password: register.password
+      });
+      setRegisterMsg('Cuenta creada correctamente.');
+    } catch (error) {
+      setRegisterMsg(error.message);
+    } finally {
+      setBusy(false);
+    }
   };
 
-  const handleLogin = e => {
+  const handleLogin = async e => {
     e.preventDefault();
-    const ok = onLogin(login.email.trim().toLowerCase(), login.password);
-    setLoginMsg(ok ? 'Sesión iniciada.' : 'Datos incorrectos. Si no tenés cuenta, elegí “Crear cuenta”.');
+    setBusy(true);
+    try {
+      await onLogin(login.email.trim().toLowerCase(), login.password);
+      setLoginMsg('Sesión iniciada.');
+    } catch (error) {
+      setLoginMsg(error.message);
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -49,7 +64,9 @@ export default function Cuenta({ user, onClose, onRegister, onLogin }) {
               <label>Contraseña</label>
               <input type="password" placeholder="••••••••" required
                 value={login.password} onChange={e => setLogin({ ...login, password: e.target.value })} />
-              <button className="primary-btn full" type="submit">Iniciar sesión</button>
+              <button className="primary-btn full" type="submit" disabled={busy}>
+                {busy ? 'Ingresando...' : 'Iniciar sesión'}
+              </button>
               <p className="form-message">{loginMsg}</p>
             </form>
           </div>
@@ -66,9 +83,11 @@ export default function Cuenta({ user, onClose, onRegister, onLogin }) {
               <input type="email" placeholder="tu@email.com" required
                 value={register.email} onChange={e => setRegister({ ...register, email: e.target.value })} />
               <label>Contraseña</label>
-              <input type="password" minLength={4} placeholder="Mínimo 4 caracteres" required
+              <input type="password" minLength={8} placeholder="Mínimo 8 caracteres" required
                 value={register.password} onChange={e => setRegister({ ...register, password: e.target.value })} />
-              <button className="primary-btn full" type="submit">Registrarme</button>
+              <button className="primary-btn full" type="submit" disabled={busy}>
+                {busy ? 'Creando cuenta...' : 'Registrarme'}
+              </button>
               <p className="form-message">{registerMsg}</p>
             </form>
           </div>

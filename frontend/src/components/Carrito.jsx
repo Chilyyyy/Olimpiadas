@@ -1,7 +1,7 @@
 // Panel del carrito.
-import { trips, money } from '../datos.js';
+import { money } from '../datos.js';
 
-export default function Carrito({ cart, total, onClose, onChange, onRemove, onClear, onCheckout }) {
+export default function Carrito({ cart, trips, total, onClose, onChange, onRemove, onClear, onCheckout }) {
   const entries = Object.entries(cart);
 
   return (

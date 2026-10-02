@@ -1,9 +1,8 @@
 // Carrusel con los paquetes.
 import { useState } from 'react';
-import { slides } from '../datos.js';
 import Viaje from './Viaje.jsx';
 
-export default function Destinos({ onAdd }) {
+export default function Destinos({ slides, onAdd }) {
   const [current, setCurrent] = useState(0);
   const goTo = index => setCurrent((index + slides.length) % slides.length);
 

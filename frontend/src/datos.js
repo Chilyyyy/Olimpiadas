@@ -1,4 +1,4 @@
-// Los viajes y servicios. Si querés sumar uno, tocá acá nomás.
+// Viajes de muestra para mostrar la página mientras responde el servidor.
 export const slides = [
   {
     num: '01', title: 'Asia', cls: 'japan',
@@ -34,12 +34,12 @@ export const slides = [
   }
 ];
 
-// Mapa id -> viaje, derivado de los slides
+// Acceso rápido a cada viaje usando su identificador.
 export const trips = Object.fromEntries(
   slides.flatMap(s => s.trips).map(t => [t.id, t])
 );
 
-// Etiqueta de país para la tarjeta (se muestra en mayúsculas junto con la ciudad)
+// Servicios que se muestran en la página principal.
 export const services = [
   { num: '01', title: 'Vuelos', text: 'Opciones de vuelos de ida y vuelta para tus destinos.' },
   { num: '02', title: 'Alojamiento', text: 'Hoteles y resorts seleccionados para cada paquete.' },
@@ -47,4 +47,5 @@ export const services = [
   { num: '04', title: 'Traslados', text: 'Traslados coordinados desde el aeropuerto hasta tu alojamiento.' }
 ];
 
+// Formatea precios con los separadores usados en Argentina.
 export const money = value => '$' + value.toLocaleString('es-AR');

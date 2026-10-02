@@ -2,11 +2,10 @@
 export default function Portada({ onOpenCart }) {
   return (
     <section id="inicio" className="hero">
+      <div className="hero-overlay"></div>
       <div className="hero-content">
         <span className="kicker">TU PRÓXIMO DESTINO EMPIEZA ACÁ</span>
-        <h1>Viajá lejos.<br/>
-          <em className="title_2">
-            Viví más.</em></h1>
+        <h1>Viajá lejos.<br /><em>Viví más.</em></h1>
         <p>Descubrí destinos únicos, elegí tus paquetes y armá tu viaje a tu medida.</p>
         <div className="hero-actions">
           <a href="#destinos" className="primary-btn">Explorar destinos</a>
