@@ -8,7 +8,10 @@ export default function Viaje({ trip, onAdd }) {
       <div className="trip-body">
         <div className="trip-top">
           <span className="country">{trip.place} · {trip.days} DÍAS</span>
-          <span className="rating">★ {trip.rating}</span>
+          <span className="rating">
+            <span className="star_rating">★</span>
+             {trip.rating}  
+          </span>
         </div>
         <h3>{trip.name}</h3>
         <p>{trip.desc}</p>
