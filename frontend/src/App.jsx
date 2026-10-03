@@ -1,5 +1,6 @@
 // Acá está todo el estado: carrito, usuario y modales.
 import { useCallback, useEffect, useRef, useState } from 'react';
+import './App.css';
 import useGuardado from './hooks/useGuardado.js';
 import { slides as sampleSlides, trips as sampleTrips } from './datos.js';
 import api from './api.js';

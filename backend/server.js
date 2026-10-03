@@ -5,11 +5,15 @@ import express from 'express'
 import helmet from 'helmet'
 import jwt from 'jsonwebtoken'
 import { MercadoPagoConfig, Payment, Preference } from 'mercadopago'
+import { fileURLToPath } from 'node:url'
 import db from './db.js'
 
 const app = express()
-const port = Number(process.env.PORT) || 3000
-const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173'
+const port = Number(process.env.PORT) || 10000
+const frontendUrl = process.env.FRONTEND_URL
+  || process.env.RENDER_EXTERNAL_URL
+  || 'http://localhost:5173'
+const frontendBuildPath = fileURLToPath(new URL('../frontend/dist/', import.meta.url))
 const unwrap = value => value?.replace(/^´|´$/g, '')
 const mercadoPagoAccessToken = unwrap(
   process.env.MERCADO_PAGO_ACCESS_TOKEN ?? process.env.VITE_MERCADO_PAGO_ACCESS_TOKEN,
@@ -353,6 +357,8 @@ app.post('/api/payments/confirm', requireLogin, async (req, res) => {
   }
 })
 
+app.use(express.static(frontendBuildPath))
+
 // Muestra los errores esperados sin exponer detalles internos de la base.
 app.use((error, _req, res, _next) => {
   if (error.code === '23505') {
@@ -368,7 +374,7 @@ app.use((error, _req, res, _next) => {
 
 async function startServer() {
   await db.query('SELECT 1')
-  app.listen(port, () => console.log(`API lista en http://localhost:${port}`))
+  app.listen(port, () => console.log(`Servidor listo en el puerto ${port}`))
 }
 
 startServer().catch(error => {
