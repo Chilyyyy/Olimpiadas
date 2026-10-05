@@ -106,6 +106,17 @@ function requireLogin(req, _res, next) {
   }
 }
 
+async function requireSalesManager(req, _res, next) {
+  const result = await db.query(
+    'SELECT rol FROM usuarios WHERE id_usuarios = $1',
+    [req.userId],
+  )
+  if (result.rows[0]?.rol !== 'jefe_ventas') {
+    return next(apiError(403, 'Esta sección es exclusiva del jefe de ventas.'))
+  }
+  return next()
+}
+
 // Avisa si falta el token privado necesario para hablar con Mercado Pago.
 function requireMercadoPago() {
   if (!mercadoPagoClient) {
@@ -152,6 +163,83 @@ function isValidDate(value) {
   return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value
 }
 
+async function createCheckoutUrl(orderId, items, payerEmail) {
+  const returnUrl = new URL('/?payment=return', frontendUrl).toString()
+  const canAutoReturn = new URL(frontendUrl).protocol === 'https:'
+  const preference = await new Preference(mercadoPagoClient).create({
+    body: {
+      items: items.map((item, index) => ({
+        id: `${item.slug}-${index + 1}`,
+        title: `${item.name.slice(0, 160)} - ${serviceLabels[item.serviceType]} - ${item.departureDate} - ${item.days} días - ${item.quantity} viajeros`,
+        quantity: 1,
+        unit_price: item.total,
+        currency_id: 'ARS',
+      })),
+      payer: { email: payerEmail },
+      external_reference: String(orderId),
+      back_urls: {
+        success: returnUrl,
+        pending: returnUrl,
+        failure: returnUrl,
+      },
+      ...(canAutoReturn ? { auto_return: 'approved' } : {}),
+    },
+  })
+  const checkoutUrl = mercadoPagoAccessToken.startsWith('TEST-')
+    ? preference.sandbox_init_point || preference.init_point
+    : preference.init_point
+
+  if (!checkoutUrl) throw apiError(502, 'Mercado Pago no devolvió un enlace de pago.')
+  return checkoutUrl
+}
+
+async function listOrders(userId) {
+  const result = await db.query(
+    `SELECT o.id_pedidos, o.fecha, o.estado, o.estado_pedido,
+            u.nombre, u.apellido, u.email,
+            d.id_detalles, d.cantidad, d.precio_unitario, d.precio_total,
+            d.tipo_servicio, d.fecha_salida, d.dias, p.slug, p.producto
+     FROM pedidos o
+     JOIN usuarios u ON u.id_usuarios = o.id_usuarios
+     LEFT JOIN detalles_productos d ON d.id_pedidos = o.id_pedidos
+     LEFT JOIN productos p ON p.id_productos = d.id_productos
+     WHERE ($1::integer IS NULL OR o.id_usuarios = $1)
+     ORDER BY o.fecha DESC, o.id_pedidos DESC, d.id_detalles`,
+    [userId],
+  )
+  const orders = new Map()
+  for (const row of result.rows) {
+    if (!orders.has(row.id_pedidos)) {
+      orders.set(row.id_pedidos, {
+        id: row.id_pedidos,
+        date: row.fecha,
+        paid: row.estado,
+        status: row.estado_pedido,
+        customer: `${row.nombre} ${row.apellido}`.trim(),
+        email: row.email,
+        items: [],
+        total: 0,
+      })
+    }
+    if (row.id_detalles == null) continue
+    const item = {
+      id: row.id_detalles,
+      productId: row.slug,
+      name: row.producto,
+      quantity: row.cantidad,
+      unitPrice: Number(row.precio_unitario),
+      total: Number(row.precio_total ?? Number(row.precio_unitario) * Number(row.cantidad)),
+      serviceType: row.tipo_servicio,
+      departureDate: row.fecha_salida,
+      days: row.dias,
+    }
+    const order = orders.get(row.id_pedidos)
+    order.items.push(item)
+    order.total += item.total
+  }
+  return [...orders.values()]
+}
+
 // Comprueba que el backend puede conectarse a Supabase.
 app.get('/api/health', async (_req, res) => {
   await db.query('SELECT 1')
@@ -164,6 +252,52 @@ app.get('/api/products', async (_req, res) => {
     'SELECT * FROM productos WHERE slug IS NOT NULL ORDER BY numero_categoria, slug',
   )
   res.json(result.rows.map(formatProduct))
+})
+
+// Solo el jefe de ventas puede cargar productos nuevos.
+app.post('/api/products', requireLogin, requireSalesManager, async (req, res) => {
+  const name = String(req.body?.name ?? '').trim()
+  const type = String(req.body?.type ?? 'Paquete turístico').trim()
+  const country = String(req.body?.country ?? '').trim()
+  const place = String(req.body?.place ?? '').trim()
+  const category = String(req.body?.category ?? '').trim()
+  const description = String(req.body?.description ?? '').trim()
+  const price = Number(req.body?.price)
+  const days = Number(req.body?.days)
+  const rating = Number(req.body?.rating ?? 5)
+  if (!name || name.length > 255 || !type || type.length > 100 || !country || country.length > 100
+      || !place || place.length > 100 || !category || category.length > 100
+      || !description || description.length > 2000) {
+    throw apiError(400, 'Completa los datos del producto con textos válidos.')
+  }
+  if (!Number.isFinite(price) || price <= 0 || price > 1000000000
+      || !Number.isInteger(days) || days < 1 || days > 365
+      || !Number.isFinite(rating) || rating < 0 || rating > 5) {
+    throw apiError(400, 'Revisa el precio, la duración y la calificación del producto.')
+  }
+
+  const slug = name.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+    .slice(0, 80).replace(/-+$/g, '')
+  if (!slug) throw apiError(400, 'El nombre no permite crear un identificador válido.')
+  const existing = await db.query('SELECT 1 FROM productos WHERE slug = $1', [slug])
+  if (existing.rowCount) throw apiError(409, 'Ya existe un producto con ese nombre.')
+
+  let result
+  try {
+    result = await db.query(
+      `INSERT INTO productos
+         (codigo, producto, tipo, precio, slug, pais, foto, lugar, dias, rating,
+          descripcion, numero_categoria, categoria, clase_categoria, descripcion_categoria)
+       VALUES ($1, $2, $3, $4, $5, $6, 'custom-photo', $7, $8, $9, $10, '99', $11, 'custom', $11)
+       RETURNING *`,
+      [`PROD-${slug}-${Date.now()}`, name, type, price, slug, country, place, days, rating, description, category],
+    )
+  } catch (error) {
+    if (error.code === '23505') throw apiError(409, 'Ya existe un producto con ese nombre.')
+    throw error
+  }
+  res.status(201).json(formatProduct(result.rows[0]))
 })
 
 // Crea cuentas con contraseña cifrada y devuelve una sesión.
@@ -187,7 +321,7 @@ app.post('/api/auth/register', async (req, res) => {
   const result = await db.query(
     `INSERT INTO usuarios (nombre, apellido, email, password_hash)
      VALUES ($1, $2, $3, $4)
-     RETURNING id_usuarios, nombre, apellido, email`,
+     RETURNING id_usuarios, nombre, apellido, email, rol`,
     [firstName, lastNameParts.join(' '), email, passwordHash],
   )
   const account = result.rows[0]
@@ -199,6 +333,7 @@ app.post('/api/auth/register', async (req, res) => {
       id: account.id_usuarios,
       name: `${account.nombre} ${account.apellido}`.trim(),
       email: account.email,
+      role: account.rol,
     },
   })
 })
@@ -208,7 +343,7 @@ app.post('/api/auth/login', async (req, res) => {
   const email = String(req.body?.email ?? '').trim().toLowerCase()
   const password = String(req.body?.password ?? '')
   const result = await db.query(
-    'SELECT id_usuarios, nombre, apellido, email, password_hash FROM usuarios WHERE email = $1',
+    'SELECT id_usuarios, nombre, apellido, email, password_hash, rol FROM usuarios WHERE email = $1',
     [email],
   )
   const account = result.rows[0]
@@ -224,6 +359,7 @@ app.post('/api/auth/login', async (req, res) => {
       id: account.id_usuarios,
       name: `${account.nombre} ${account.apellido}`.trim(),
       email: account.email,
+      role: account.rol,
     },
   })
 })
@@ -320,35 +456,19 @@ app.post('/api/orders', requireLogin, async (req, res, next) => {
       )
     }
 
-    // El servidor usa precios de Supabase y el correo de la cuenta.
-    const returnUrl = new URL('/?payment=return', frontendUrl).toString()
-    const canAutoReturn = new URL(frontendUrl).protocol === 'https:'
-    const preference = await new Preference(mercadoPagoClient).create({
-      body: {
-        items: pricedReservations.map((reservation, index) => ({
-          id: `${reservation.product.slug}-${index + 1}`,
-          title: `${reservation.product.producto.slice(0, 160)} - ${serviceLabels[reservation.serviceType]} - ${reservation.departureDate} - ${reservation.days} días - ${reservation.quantity} viajeros`,
-          quantity: 1,
-          unit_price: reservation.total,
-          currency_id: 'ARS',
-        })),
-        payer: { email: payerEmail },
-        external_reference: String(order.id_pedidos),
-        back_urls: {
-          success: returnUrl,
-          pending: returnUrl,
-          failure: returnUrl,
-        },
-        ...(canAutoReturn ? { auto_return: 'approved' } : {}),
-      },
-    })
-    const checkoutUrl = mercadoPagoAccessToken.startsWith('TEST-')
-      ? preference.sandbox_init_point || preference.init_point
-      : preference.init_point
-
-    if (!checkoutUrl) {
-      throw apiError(502, 'Mercado Pago no devolvió un enlace de pago.')
-    }
+    const checkoutUrl = await createCheckoutUrl(
+      order.id_pedidos,
+      pricedReservations.map(reservation => ({
+        slug: reservation.product.slug,
+        name: reservation.product.producto,
+        serviceType: reservation.serviceType,
+        departureDate: reservation.departureDate,
+        days: reservation.days,
+        quantity: reservation.quantity,
+        total: reservation.total,
+      })),
+      payerEmail,
+    )
 
     await client.query('COMMIT')
     transactionOpen = false
@@ -364,6 +484,162 @@ app.post('/api/orders', requireLogin, async (req, res, next) => {
   } finally {
     client.release()
   }
+})
+
+app.get('/api/orders', requireLogin, async (req, res) => {
+  res.json(await listOrders(req.userId))
+})
+
+app.patch('/api/orders/:orderId/items/:itemId', requireLogin, async (req, res) => {
+  const orderId = Number(req.params.orderId)
+  const itemId = Number(req.params.itemId)
+  const quantity = Number(req.body?.quantity)
+  const departureDate = String(req.body?.departureDate ?? '')
+  const days = Number(req.body?.days)
+  if (!Number.isSafeInteger(orderId) || orderId < 1
+      || !Number.isSafeInteger(itemId) || itemId < 1
+      || !Number.isInteger(quantity) || quantity < 1 || quantity > 10
+      || !isValidDate(departureDate) || departureDate < todayArgentinaDate()
+      || !Number.isInteger(days) || days < 1 || days > 365) {
+    throw apiError(400, 'Revisa la fecha, duración y cantidad del pedido.')
+  }
+
+  const client = await db.connect()
+  try {
+    await client.query('BEGIN')
+    const found = await client.query(
+      `SELECT o.estado, o.estado_pedido, d.id_detalles, d.tipo_servicio,
+              p.precio, p.slug
+       FROM pedidos o
+       JOIN detalles_productos d ON d.id_pedidos = o.id_pedidos
+       JOIN productos p ON p.id_productos = d.id_productos
+       WHERE o.id_pedidos = $1 AND o.id_usuarios = $2 AND d.id_detalles = $3
+       FOR UPDATE OF o, d`,
+      [orderId, req.userId, itemId],
+    )
+    const order = found.rows[0]
+    if (!order) throw apiError(404, 'No se encontró el producto dentro de tu pedido.')
+    if (order.estado || order.estado_pedido !== 'pendiente') {
+      throw apiError(409, 'Solo puedes modificar pedidos pendientes de pago.')
+    }
+    const unitPrice = Number(order.precio)
+    const total = unitPrice + (quantity - 1) * extraPassengerDailyRate * days
+    await client.query(
+      `UPDATE detalles_productos
+       SET cantidad = $1, fecha_salida = $2, dias = $3,
+           precio_unitario = $4, precio_total = $5
+       WHERE id_detalles = $6`,
+      [quantity, departureDate, days, unitPrice, total, itemId],
+    )
+    await client.query('COMMIT')
+    res.json({ ok: true })
+  } catch (error) {
+    await client.query('ROLLBACK')
+    throw error
+  } finally {
+    client.release()
+  }
+})
+
+app.delete('/api/orders/:orderId', requireLogin, async (req, res) => {
+  const orderId = Number(req.params.orderId)
+  if (!Number.isSafeInteger(orderId) || orderId < 1) {
+    throw apiError(400, 'El número de pedido no es válido.')
+  }
+
+  const client = await db.connect()
+  try {
+    await client.query('BEGIN')
+    const found = await client.query(
+      'SELECT estado, estado_pedido FROM pedidos WHERE id_pedidos = $1 AND id_usuarios = $2 FOR UPDATE',
+      [orderId, req.userId],
+    )
+    const order = found.rows[0]
+    if (!order) throw apiError(404, 'No se encontró el pedido.')
+    if (order.estado || order.estado_pedido !== 'pendiente') {
+      throw apiError(409, 'Solo puedes eliminar pedidos pendientes de pago.')
+    }
+    await client.query('DELETE FROM detalles_productos WHERE id_pedidos = $1', [orderId])
+    await client.query('DELETE FROM numero_pedidos WHERE numero_pedidos = $1', [orderId])
+    await client.query('DELETE FROM pedidos WHERE id_pedidos = $1', [orderId])
+    await client.query('COMMIT')
+    res.json({ ok: true })
+  } catch (error) {
+    await client.query('ROLLBACK')
+    throw error
+  } finally {
+    client.release()
+  }
+})
+
+app.post('/api/orders/:orderId/checkout', requireLogin, async (req, res) => {
+  requireMercadoPago()
+  const orderId = Number(req.params.orderId)
+  if (!Number.isSafeInteger(orderId) || orderId < 1) {
+    throw apiError(400, 'El número de pedido no es válido.')
+  }
+  const orderResult = await db.query(
+    `SELECT o.estado, o.estado_pedido, u.email
+     FROM pedidos o JOIN usuarios u ON u.id_usuarios = o.id_usuarios
+     WHERE o.id_pedidos = $1 AND o.id_usuarios = $2`,
+    [orderId, req.userId],
+  )
+  const order = orderResult.rows[0]
+  if (!order) throw apiError(404, 'No se encontró el pedido.')
+  if (order.estado || order.estado_pedido !== 'pendiente') {
+    throw apiError(409, 'Este pedido ya no está pendiente de pago.')
+  }
+  const itemsResult = await db.query(
+    `SELECT p.slug, p.producto, d.tipo_servicio,
+            COALESCE(d.fecha_salida, CURRENT_DATE) AS fecha_salida,
+            COALESCE(d.dias, p.dias, 1) AS dias, d.cantidad,
+            COALESCE(d.precio_total, d.cantidad * d.precio_unitario) AS precio_total
+     FROM detalles_productos d
+     JOIN productos p ON p.id_productos = d.id_productos
+     WHERE d.id_pedidos = $1 ORDER BY d.id_detalles`,
+    [orderId],
+  )
+  if (itemsResult.rowCount === 0) throw apiError(409, 'El pedido no contiene productos.')
+  const items = itemsResult.rows.map(item => ({
+    slug: item.slug,
+    name: item.producto,
+    serviceType: item.tipo_servicio,
+    departureDate: item.fecha_salida instanceof Date
+      ? item.fecha_salida.toISOString().slice(0, 10)
+      : String(item.fecha_salida).slice(0, 10),
+    days: Number(item.dias),
+    quantity: Number(item.cantidad),
+    total: Number(item.precio_total),
+  }))
+  const checkoutUrl = await createCheckoutUrl(orderId, items, order.email)
+  res.json({ checkoutUrl })
+})
+
+app.get('/api/sales/orders', requireLogin, requireSalesManager, async (_req, res) => {
+  res.json(await listOrders(null))
+})
+
+app.patch('/api/sales/orders/:orderId', requireLogin, requireSalesManager, async (req, res) => {
+  const orderId = Number(req.params.orderId)
+  const status = String(req.body?.status ?? '')
+  if (!Number.isSafeInteger(orderId) || orderId < 1
+      || !['entregado', 'anulado'].includes(status)) {
+    throw apiError(400, 'Selecciona una acción válida para el pedido.')
+  }
+  const found = await db.query(
+    'SELECT estado, estado_pedido FROM pedidos WHERE id_pedidos = $1',
+    [orderId],
+  )
+  const order = found.rows[0]
+  if (!order) throw apiError(404, 'No se encontró el pedido.')
+  if (order.estado_pedido !== 'pendiente') {
+    throw apiError(409, 'El pedido ya fue entregado o anulado.')
+  }
+  if (status === 'entregado' && !order.estado) {
+    throw apiError(409, 'Solo se pueden entregar pedidos con el pago confirmado.')
+  }
+  await db.query('UPDATE pedidos SET estado_pedido = $1 WHERE id_pedidos = $2', [status, orderId])
+  res.json({ ok: true })
 })
 
 // Confirma la reserva solo si Mercado Pago aprobó el pago.
@@ -402,11 +678,14 @@ app.post('/api/payments/confirm', requireLogin, async (req, res) => {
   try {
     await client.query('BEGIN')
     const orderResult = await client.query(
-      'SELECT estado, fecha FROM pedidos WHERE id_pedidos = $1 AND id_usuarios = $2 FOR UPDATE',
+      'SELECT estado, estado_pedido, fecha FROM pedidos WHERE id_pedidos = $1 AND id_usuarios = $2 FOR UPDATE',
       [orderId, req.userId],
     )
     const order = orderResult.rows[0]
     if (!order) throw apiError(404, 'No se encontró la reserva asociada a este pago.')
+    if (order.estado_pedido === 'anulado') {
+      throw apiError(409, 'El pedido fue anulado y no puede confirmarse.')
+    }
 
     const totalResult = await client.query(
       `SELECT COALESCE(SUM(COALESCE(precio_total, cantidad * precio_unitario)), 0)::numeric AS total

@@ -1,7 +1,13 @@
 // Login y registro.
 import { useState } from 'react';
 
-export default function Cuenta({ user, onClose, onRegister, onLogin }) {
+export default function Cuenta({
+  onClose,
+  onRegister,
+  onLogin,
+  onManagerLogin,
+  managerOnly = false,
+}) {
   const [tab, setTab] = useState('login');
   const [login, setLogin] = useState({ email: '', password: '' });
   const [register, setRegister] = useState({ name: '', email: '', password: '' });
@@ -34,7 +40,11 @@ export default function Cuenta({ user, onClose, onRegister, onLogin }) {
     e.preventDefault();
     setBusy(true);
     try {
-      await onLogin(login.email.trim().toLowerCase(), login.password);
+      if (managerOnly) {
+        await onManagerLogin(login.email.trim().toLowerCase(), login.password);
+      } else {
+        await onLogin(login.email.trim().toLowerCase(), login.password);
+      }
       setLoginMsg('Sesión iniciada.');
     } catch (error) {
       setLoginMsg(error.message);
@@ -47,16 +57,20 @@ export default function Cuenta({ user, onClose, onRegister, onLogin }) {
     <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="account-modal">
         <button className="close-btn" onClick={onClose}>×</button>
-        <div className="account-tabs">
-          <button className={`tab ${tab === 'login' ? 'active' : ''}`} onClick={() => setTab('login')}>Iniciar sesión</button>
-          <button className={`tab ${tab === 'register' ? 'active' : ''}`} onClick={() => setTab('register')}>Crear cuenta</button>
-        </div>
+        {!managerOnly && (
+          <div className="account-tabs">
+            <button className={`tab ${tab === 'login' ? 'active' : ''}`} onClick={() => setTab('login')}>Iniciar sesión</button>
+            <button className={`tab ${tab === 'register' ? 'active' : ''}`} onClick={() => setTab('register')}>Crear cuenta</button>
+          </div>
+        )}
 
         {tab === 'login' ? (
           <div>
-            <span className="kicker dark">CUENTA</span>
-            <h2>Bienvenido de nuevo</h2>
-            <p>Tu cuenta solo es necesaria al momento de confirmar el pago.</p>
+            <span className="kicker dark">{managerOnly ? 'ACCESO RESTRINGIDO' : 'CUENTA'}</span>
+            <h2>{managerOnly ? 'Jefe de ventas' : 'Bienvenido de nuevo'}</h2>
+            <p>{managerOnly
+              ? 'Ingresa con una cuenta habilitada para gestionar productos y pedidos.'
+              : 'Tu cuenta solo es necesaria al momento de confirmar el pago.'}</p>
             <form onSubmit={handleLogin}>
               <label>Email</label>
               <input type="email" placeholder="tu@email.com" required
@@ -65,7 +79,7 @@ export default function Cuenta({ user, onClose, onRegister, onLogin }) {
               <input type="password" placeholder="••••••••" required
                 value={login.password} onChange={e => setLogin({ ...login, password: e.target.value })} />
               <button className="primary-btn full" type="submit" disabled={busy}>
-                {busy ? 'Ingresando...' : 'Iniciar sesión'}
+                {busy ? 'Ingresando...' : managerOnly ? 'Ingresar como jefe de ventas' : 'Iniciar sesión'}
               </button>
               <p className="form-message">{loginMsg}</p>
             </form>

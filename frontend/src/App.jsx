@@ -1,6 +1,5 @@
 // Acá está todo el estado: carrito, usuario y modales.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import './App.css';
 import './booking.css';
 import useGuardado from './hooks/useGuardado.js';
 import {
@@ -20,6 +19,7 @@ import Carrito from './components/Carrito.jsx';
 import Cuenta from './components/Cuenta.jsx';
 import Pago from './components/Pago.jsx';
 import Aviso from './components/Aviso.jsx';
+import Pedidos from './components/Pedidos.jsx';
 
 function bookingKey(booking) {
   return JSON.stringify([
@@ -55,7 +55,9 @@ export default function App() {
 
   const [cartOpen, setCartOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
+  const [managerLoginOpen, setManagerLoginOpen] = useState(false);
   const [paymentOpen, setPaymentOpen] = useState(false);
+  const [ordersOpen, setOrdersOpen] = useState(false);
   const [paymentBusy, setPaymentBusy] = useState(false);
   const [paymentError, setPaymentError] = useState('');
   const [toast, setAviso] = useState({ message: '', show: false });
@@ -226,8 +228,51 @@ export default function App() {
     const session = await api.login({ email, password });
     setToken(session.token);
     setUser(session.user);
-    later(() => setAccountOpen(false), 500);
+    later(() => {
+      setAccountOpen(false);
+      setManagerLoginOpen(false);
+    }, 500);
     showAviso('Sesión iniciada correctamente');
+  };
+
+  const handleManagerLogin = async (email, password) => {
+    const session = await api.login({ email, password });
+    if (session.user.role !== 'jefe_ventas') {
+      throw new Error('Esta cuenta no tiene permisos de jefe de ventas.');
+    }
+    setToken(session.token);
+    setUser(session.user);
+    later(() => {
+      setAccountOpen(false);
+      setManagerLoginOpen(false);
+    }, 500);
+    showAviso('Sesión de jefe de ventas iniciada.');
+  };
+
+  const addPublishedProduct = product => {
+    setTrips(current => ({ ...current, [product.id]: product }));
+    setSlides(current => {
+      const existing = current.some(slide => slide.num === product.num);
+      if (existing) {
+        return current.map(slide => slide.num === product.num
+          ? { ...slide, trips: [...slide.trips, product] }
+          : slide);
+      }
+      return [...current, {
+        num: product.num,
+        title: product.category,
+        cls: product.cls,
+        desc: product.categoryDescription,
+        trips: [product],
+      }];
+    });
+  };
+
+  const logout = () => {
+    setToken(null);
+    setUser(null);
+    setOrdersOpen(false);
+    showAviso('Sesión cerrada.');
   };
 
   const finishPayment = async () => {
@@ -264,6 +309,9 @@ export default function App() {
         cartCount={cartCount}
         onOpenAccount={() => setAccountOpen(true)}
         onOpenCart={() => setCartOpen(true)}
+        onOpenOrders={() => setOrdersOpen(true)}
+        onOpenManagerLogin={() => setManagerLoginOpen(true)}
+        onLogout={logout}
       />
 
       <main>
@@ -288,12 +336,26 @@ export default function App() {
         />
       )}
 
-      {accountOpen && (
+      {(accountOpen || managerLoginOpen) && (
         <Cuenta
-          user={user}
-          onClose={() => setAccountOpen(false)}
+          managerOnly={managerLoginOpen}
+          onClose={() => {
+            setAccountOpen(false);
+            setManagerLoginOpen(false);
+          }}
           onRegister={handleRegister}
           onLogin={handleLogin}
+          onManagerLogin={handleManagerLogin}
+        />
+      )}
+
+      {ordersOpen && user && (
+        <Pedidos
+          user={user}
+          token={token}
+          onClose={() => setOrdersOpen(false)}
+          onNotice={showAviso}
+          onProductCreated={addPublishedProduct}
         />
       )}
 

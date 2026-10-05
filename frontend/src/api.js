@@ -38,6 +38,30 @@ const api = {
     token,
     body: JSON.stringify({ items }),
   }),
+  getOrders: token => request('/orders', { token }),
+  updateOrderItem: (token, orderId, itemId, item) => request(
+    `/orders/${orderId}/items/${itemId}`,
+    { method: 'PATCH', token, body: JSON.stringify(item) },
+  ),
+  deleteOrder: (token, orderId) => request(`/orders/${orderId}`, {
+    method: 'DELETE',
+    token,
+  }),
+  checkoutOrder: (token, orderId) => request(`/orders/${orderId}/checkout`, {
+    method: 'POST',
+    token,
+  }),
+  getSalesOrders: token => request('/sales/orders', { token }),
+  updateSalesOrder: (token, orderId, status) => request(`/sales/orders/${orderId}`, {
+    method: 'PATCH',
+    token,
+    body: JSON.stringify({ status }),
+  }),
+  createProduct: (token, product) => request('/products', {
+    method: 'POST',
+    token,
+    body: JSON.stringify(product),
+  }),
   confirmPayment: (token, paymentId) => request('/payments/confirm', {
     method: 'POST',
     token,
