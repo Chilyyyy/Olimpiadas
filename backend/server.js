@@ -5,6 +5,7 @@ import express from 'express'
 import helmet from 'helmet'
 import jwt from 'jsonwebtoken'
 import { MercadoPagoConfig, Payment, Preference } from 'mercadopago'
+import nodemailer from 'nodemailer'
 import { fileURLToPath } from 'node:url'
 import db from './db.js'
 
@@ -21,6 +22,29 @@ const mercadoPagoAccessToken = unwrap(
 const mercadoPagoClient = mercadoPagoAccessToken
   ? new MercadoPagoConfig({ accessToken: mercadoPagoAccessToken })
   : null
+const smtpHost = process.env.SMTP_HOST?.trim()
+const smtpUser = process.env.SMTP_USER?.trim()
+const smtpPassword = process.env.SMTP_PASS
+const smtpConfigured = Boolean(smtpUser || smtpPassword)
+const smtpPort = Number(process.env.SMTP_PORT || 587)
+if (smtpConfigured && (!smtpHost || !smtpUser || !smtpPassword)) {
+  throw new Error('Configura SMTP_HOST, SMTP_USER y SMTP_PASS para habilitar el envío de correos.')
+}
+if (!smtpConfigured && (smtpHost || process.env.SMTP_FROM?.trim())) {
+  console.warn('El envío de correos está deshabilitado; configura SMTP_USER y SMTP_PASS para habilitarlo.')
+}
+if (smtpConfigured && (!Number.isInteger(smtpPort) || smtpPort < 1 || smtpPort > 65535)) {
+  throw new Error('SMTP_PORT debe ser un puerto válido.')
+}
+const mailTransport = smtpConfigured
+  ? nodemailer.createTransport({
+    host: smtpHost,
+    port: smtpPort,
+    secure: smtpPort === 465,
+    auth: { user: smtpUser, pass: smtpPassword },
+  })
+  : null
+const mailFrom = process.env.SMTP_FROM?.trim() || smtpUser
 const jwtSecret = process.env.JWT_SECRET || (
   process.env.NODE_ENV === 'production' ? '' : randomBytes(32).toString('hex')
 )
@@ -87,6 +111,45 @@ function requireMercadoPago() {
   if (!mercadoPagoClient) {
     throw apiError(503, 'Configura el access token de Mercado Pago en backend/.env.')
   }
+}
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, character => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  })[character])
+}
+
+function formatMoney(amount) {
+  return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(amount)
+}
+
+const serviceLabels = {
+  paquete: 'Paquete completo',
+  viaje: 'Viaje simple',
+  hotel: 'Reservación en hotel',
+  vehiculo: 'Reservación de vehículo',
+}
+const extraPassengerDailyRate = 200000
+
+function todayArgentinaDate() {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Argentina/Buenos_Aires',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date())
+  const values = Object.fromEntries(parts.map(part => [part.type, part.value]))
+  return `${values.year}-${values.month}-${values.day}`
+}
+
+function isValidDate(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+  const parsed = new Date(`${value}T00:00:00.000Z`)
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value
 }
 
 // Comprueba que el backend puede conectarse a Supabase.
@@ -173,18 +236,26 @@ app.post('/api/orders', requireLogin, async (req, res, next) => {
     throw apiError(400, 'Agrega entre 1 y 20 viajes a la reserva.')
   }
 
-  const quantities = new Map()
+  const reservations = []
   for (const item of items) {
-    const productId = String(item.productId ?? '')
-    const quantity = Number(item.quantity)
+    const productId = String(item?.productId ?? '').trim()
+    const quantity = Number(item?.quantity)
     if (!productId || !Number.isInteger(quantity) || quantity < 1 || quantity > 10) {
-      throw apiError(400, 'La cantidad de cada viaje debe ser de 1 a 10.')
+      throw apiError(400, 'La cantidad de viajeros de cada reserva debe ser de 1 a 10.')
     }
-    quantities.set(productId, (quantities.get(productId) ?? 0) + quantity)
-  }
-
-  if ([...quantities.values()].some(quantity => quantity > 10)) {
-    throw apiError(400, 'No se pueden reservar más de 10 unidades del mismo viaje.')
+    const serviceType = String(item?.serviceType ?? '')
+    if (!Object.hasOwn(serviceLabels, serviceType)) {
+      throw apiError(400, 'Selecciona un tipo de reserva válido.')
+    }
+    const departureDate = String(item?.departureDate ?? '')
+    if (!isValidDate(departureDate) || departureDate < todayArgentinaDate()) {
+      throw apiError(400, 'La fecha de salida debe ser hoy o una fecha futura.')
+    }
+    const days = Number(item?.days)
+    if (!Number.isInteger(days) || days < 1 || days > 365) {
+      throw apiError(400, 'La duración debe ser de 1 a 365 días.')
+    }
+    reservations.push({ productId, quantity, serviceType, departureDate, days })
   }
 
   const client = await db.connect()
@@ -192,11 +263,12 @@ app.post('/api/orders', requireLogin, async (req, res, next) => {
   try {
     await client.query('BEGIN')
     transactionOpen = true
+    const productIds = [...new Set(reservations.map(reservation => reservation.productId))]
     const productResult = await client.query(
       'SELECT id_productos, slug, producto, precio FROM productos WHERE slug = ANY($1::text[])',
-      [[...quantities.keys()]],
+      [productIds],
     )
-    if (productResult.rows.length !== quantities.size) {
+    if (productResult.rows.length !== productIds.length) {
       throw apiError(400, 'Uno de los viajes ya no está disponible.')
     }
 
@@ -208,9 +280,13 @@ app.post('/api/orders', requireLogin, async (req, res, next) => {
     const payerEmail = accountResult.rows[0]?.email
     if (!payerEmail) throw apiError(404, 'No se encontró el correo de la cuenta.')
 
-    const total = [...quantities].reduce((sum, [id, quantity]) => (
-      sum + Number(products.get(id).precio) * quantity
-    ), 0)
+    const pricedReservations = reservations.map(reservation => {
+      const product = products.get(reservation.productId)
+      const total = Number(product.precio)
+        + (reservation.quantity - 1) * extraPassengerDailyRate * reservation.days
+      return { ...reservation, product, total }
+    })
+    const total = pricedReservations.reduce((sum, reservation) => sum + reservation.total, 0)
 
     const orderResult = await client.query(
       `INSERT INTO pedidos (fecha, estado, id_usuarios)
@@ -224,17 +300,22 @@ app.post('/api/orders', requireLogin, async (req, res, next) => {
       [order.id_pedidos],
     )
 
-    for (const [id, quantity] of quantities) {
+    for (const reservation of pricedReservations) {
       await client.query(
         `INSERT INTO detalles_productos
-           (numero_pedidos, cantidad, precio_unitario, id_pedidos, id_productos)
-         VALUES ($1, $2, $3, $4, $5)`,
+           (numero_pedidos, cantidad, precio_unitario, id_pedidos, id_productos,
+            tipo_servicio, fecha_salida, dias, precio_total)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
         [
           order.id_pedidos,
-          quantity,
-          products.get(id).precio,
+          reservation.quantity,
+          reservation.product.precio,
           order.id_pedidos,
-          products.get(id).id_productos,
+          reservation.product.id_productos,
+          reservation.serviceType,
+          reservation.departureDate,
+          reservation.days,
+          reservation.total,
         ],
       )
     }
@@ -244,11 +325,11 @@ app.post('/api/orders', requireLogin, async (req, res, next) => {
     const canAutoReturn = new URL(frontendUrl).protocol === 'https:'
     const preference = await new Preference(mercadoPagoClient).create({
       body: {
-        items: [...quantities].map(([id, quantity]) => ({
-          id,
-          title: products.get(id).producto,
-          quantity,
-          unit_price: Number(products.get(id).precio),
+        items: pricedReservations.map((reservation, index) => ({
+          id: `${reservation.product.slug}-${index + 1}`,
+          title: `${reservation.product.producto.slice(0, 160)} - ${serviceLabels[reservation.serviceType]} - ${reservation.departureDate} - ${reservation.days} días - ${reservation.quantity} viajeros`,
+          quantity: 1,
+          unit_price: reservation.total,
           currency_id: 'ARS',
         })),
         payer: { email: payerEmail },
@@ -316,23 +397,49 @@ app.post('/api/payments/confirm', requireLogin, async (req, res) => {
   }
 
   const client = await db.connect()
+  let receipt
+  let expectedTotal
   try {
     await client.query('BEGIN')
     const orderResult = await client.query(
-      'SELECT estado FROM pedidos WHERE id_pedidos = $1 AND id_usuarios = $2 FOR UPDATE',
+      'SELECT estado, fecha FROM pedidos WHERE id_pedidos = $1 AND id_usuarios = $2 FOR UPDATE',
       [orderId, req.userId],
     )
     const order = orderResult.rows[0]
     if (!order) throw apiError(404, 'No se encontró la reserva asociada a este pago.')
 
     const totalResult = await client.query(
-      `SELECT COALESCE(SUM(cantidad * precio_unitario), 0)::numeric AS total
+      `SELECT COALESCE(SUM(COALESCE(precio_total, cantidad * precio_unitario)), 0)::numeric AS total
        FROM detalles_productos WHERE id_pedidos = $1`,
       [orderId],
     )
-    const expectedTotal = Number(totalResult.rows[0].total)
+    expectedTotal = Number(totalResult.rows[0].total)
     if (Math.round(Number(payment.transaction_amount) * 100) !== Math.round(expectedTotal * 100)) {
       throw apiError(400, 'El importe del pago no coincide con la reserva.')
+    }
+
+    const [accountResult, itemsResult] = await Promise.all([
+      client.query(
+        'SELECT nombre, apellido, email FROM usuarios WHERE id_usuarios = $1',
+        [req.userId],
+      ),
+      client.query(
+        `SELECT p.producto, d.cantidad, d.precio_unitario, d.precio_total,
+                d.tipo_servicio, d.fecha_salida, d.dias
+         FROM detalles_productos d
+         JOIN productos p ON p.id_productos = d.id_productos
+         WHERE d.id_pedidos = $1
+         ORDER BY d.id_detalles`,
+        [orderId],
+      ),
+    ])
+    const account = accountResult.rows[0]
+    if (!account?.email) throw apiError(404, 'No se encontró el correo de la cuenta.')
+    receipt = {
+      name: `${account.nombre} ${account.apellido}`.trim(),
+      email: account.email,
+      date: order.fecha,
+      items: itemsResult.rows,
     }
 
     if (!order.estado) {
@@ -348,13 +455,76 @@ app.post('/api/payments/confirm', requireLogin, async (req, res) => {
     }
 
     await client.query('COMMIT')
-    res.json({ orderId, status: 'approved', total: expectedTotal })
   } catch (error) {
     await client.query('ROLLBACK')
     throw error
   } finally {
     client.release()
   }
+
+  let emailSent = false
+  try {
+    if (!mailTransport) throw new Error('Configura el servicio SMTP para enviar comprobantes.')
+    const itemLines = receipt.items.map(item => {
+      const lineTotal = item.precio_total == null
+        ? Number(item.precio_unitario) * Number(item.cantidad)
+        : Number(item.precio_total)
+      const departureDate = item.fecha_salida
+        ? new Date(`${item.fecha_salida}T00:00:00.000Z`).toLocaleDateString('es-AR', { timeZone: 'UTC' })
+        : 'No especificada'
+      const reservation = `${serviceLabels[item.tipo_servicio] || 'Reserva'} · ${departureDate} · ${item.dias || 1} días · ${item.cantidad} viajeros`
+      return `${item.producto} — ${reservation} — ${formatMoney(lineTotal)}`
+    })
+    const itemHtml = receipt.items.map(item => {
+      const lineTotal = item.precio_total == null
+        ? Number(item.precio_unitario) * Number(item.cantidad)
+        : Number(item.precio_total)
+      const departureDate = item.fecha_salida
+        ? new Date(`${item.fecha_salida}T00:00:00.000Z`).toLocaleDateString('es-AR', { timeZone: 'UTC' })
+        : 'No especificada'
+      const reservation = `${serviceLabels[item.tipo_servicio] || 'Reserva'} · ${departureDate} · ${item.dias || 1} días · ${item.cantidad} viajeros`
+      return `<li>${escapeHtml(item.producto)} — ${escapeHtml(reservation)} — ${formatMoney(lineTotal)}</li>`
+    }).join('')
+    const approvedAt = payment.date_approved
+      ? new Date(payment.date_approved)
+      : new Date(receipt.date)
+    const date = new Intl.DateTimeFormat('es-AR', {
+      dateStyle: 'long',
+      timeStyle: 'short',
+      timeZone: 'America/Argentina/Buenos_Aires',
+    }).format(approvedAt)
+
+    const delivery = await mailTransport.sendMail({
+      from: mailFrom,
+      to: receipt.email,
+      subject: `Comprobante de pago - Horizonte Travel (reserva #${orderId})`,
+      text: [
+        `Hola ${receipt.name},`,
+        'Tu pago fue aprobado. Este es el comprobante de tu reserva:',
+        `Reserva: #${orderId}`,
+        `Pago de Mercado Pago: ${paymentId}`,
+        `Fecha: ${date}`,
+        ...itemLines,
+        `Total pagado: ${formatMoney(expectedTotal)}`,
+      ].join('\n'),
+      html: `<h1>Comprobante de pago</h1>
+        <p>Hola ${escapeHtml(receipt.name)}, tu pago fue aprobado.</p>
+        <p><strong>Reserva:</strong> #${orderId}<br>
+        <strong>Pago de Mercado Pago:</strong> ${escapeHtml(paymentId)}<br>
+        <strong>Fecha:</strong> ${escapeHtml(date)}</p>
+        <ul>${itemHtml}</ul>
+        <p><strong>Total pagado: ${formatMoney(expectedTotal)}</strong></p>
+        <p>Gracias por elegir Horizonte Travel.</p>`,
+    })
+    if (delivery.accepted.length === 0) {
+      throw new Error('El servidor SMTP no aceptó el correo de la cuenta.')
+    }
+    emailSent = true
+  } catch (error) {
+    console.error(`No se pudo enviar el comprobante de la reserva ${orderId}:`, error)
+  }
+
+  res.json({ orderId, status: 'approved', total: expectedTotal, emailSent })
 })
 
 app.use(express.static(frontendBuildPath))

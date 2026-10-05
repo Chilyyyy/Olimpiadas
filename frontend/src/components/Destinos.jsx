@@ -13,7 +13,7 @@ export default function Destinos({ slides, onAdd }) {
           <span className="kicker dark">PAQUETES TURÍSTICOS</span>
           <h2>Elegí tu próxima aventura</h2>
         </div>
-        <p>Podés agregar varios viajes al carrito. La cantidad de pasajes y el precio total se acumulan automáticamente.</p>
+        <p>Elegí el tipo de reserva, la fecha de salida, los días y la cantidad de viajeros para cada destino.</p>
       </div>
 
       <div className="carousel-wrap">

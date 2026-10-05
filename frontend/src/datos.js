@@ -39,6 +39,34 @@ export const trips = Object.fromEntries(
   slides.flatMap(s => s.trips).map(t => [t.id, t])
 );
 
+export const bookingTypes = [
+  { id: 'paquete', label: 'Paquete completo' },
+  { id: 'viaje', label: 'Viaje simple' },
+  { id: 'hotel', label: 'Reservación en hotel' },
+  { id: 'vehiculo', label: 'Reservación de vehículo' },
+];
+
+export const extraPassengerDailyRate = 200000;
+
+export function todayArgentinaDate() {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Argentina/Buenos_Aires',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+export const bookingTypeLabels = Object.fromEntries(
+  bookingTypes.map(type => [type.id, type.label])
+);
+
+export function bookingTotal(trip, booking) {
+  return trip.price + Math.max(0, booking.quantity - 1) * extraPassengerDailyRate * booking.days;
+}
+
 // Servicios que se muestran en la página principal.
 export const services = [
   { num: '01', title: 'Vuelos', text: 'Opciones de vuelos de ida y vuelta para tus destinos.' },

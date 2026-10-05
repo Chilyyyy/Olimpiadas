@@ -1,8 +1,14 @@
 // Acá está todo el estado: carrito, usuario y modales.
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
+import './booking.css';
 import useGuardado from './hooks/useGuardado.js';
-import { slides as sampleSlides, trips as sampleTrips } from './datos.js';
+import {
+  bookingTotal,
+  slides as sampleSlides,
+  todayArgentinaDate,
+  trips as sampleTrips,
+} from './datos.js';
 import api from './api.js';
 import Menu from './components/Menu.jsx';
 import Portada from './components/Portada.jsx';
@@ -15,6 +21,29 @@ import Cuenta from './components/Cuenta.jsx';
 import Pago from './components/Pago.jsx';
 import Aviso from './components/Aviso.jsx';
 
+function bookingKey(booking) {
+  return JSON.stringify([
+    booking.productId,
+    booking.serviceType,
+    booking.departureDate,
+    booking.days,
+  ]);
+}
+
+function normalizeCart(cart, trips) {
+  return Object.fromEntries(Object.entries(cart).map(([key, value]) => {
+    if (typeof value !== 'number') return [key, value];
+    const booking = {
+      productId: key,
+      serviceType: 'paquete',
+      departureDate: todayArgentinaDate(),
+      days: trips[key]?.days ?? 1,
+      quantity: value,
+    };
+    return [bookingKey(booking), booking];
+  }));
+}
+
 export default function App() {
   const [cart, setCart] = useGuardado('horizonteCart', {});
   const [user, setUser] = useGuardado('horizonteUser', null);
@@ -22,6 +51,7 @@ export default function App() {
   // Muestra estos viajes mientras el servidor carga el catálogo real.
   const [slides, setSlides] = useState(sampleSlides);
   const [trips, setTrips] = useState(sampleTrips);
+  const normalizedCart = useMemo(() => normalizeCart(cart, trips), [cart, trips]);
 
   const [cartOpen, setCartOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
@@ -30,6 +60,7 @@ export default function App() {
   const [paymentError, setPaymentError] = useState('');
   const [toast, setAviso] = useState({ message: '', show: false });
   const timers = useRef([]);
+  const paymentReturnHandled = useRef(false);
 
   // Limpia timeouts pendientes al desmontar
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
@@ -81,7 +112,8 @@ export default function App() {
   // Verifica el pago con el servidor al volver de Mercado Pago.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get('payment') !== 'return') return;
+    if (params.get('payment') !== 'return' || paymentReturnHandled.current) return;
+    paymentReturnHandled.current = true;
 
     const paymentId = params.get('payment_id');
     const returnedStatus = params.get('status') || params.get('collection_status');
@@ -98,7 +130,9 @@ export default function App() {
       if (result.status === 'approved') {
         setCart({});
         window.scrollTo({ top: 0, behavior: 'instant' });
-        window.alert('gracias por su compra, le enviamos el comprobante a su correo');
+        showAviso(result.emailSent
+          ? 'Pago aprobado. Enviamos el comprobante a tu correo.'
+          : 'Pago aprobado, pero no se pudo enviar el comprobante. Contactanos.');
         return;
       }
 
@@ -111,28 +145,58 @@ export default function App() {
     }).catch(error => showAviso(error.message));
   }, [token, setCart, showAviso]);
 
-  const cartCount = Object.values(cart).reduce((sum, qty) => sum + qty, 0);
-  const cartTotal = Object.entries(cart).reduce((sum, [id, qty]) => (
-    sum + (trips[id]?.price ?? 0) * qty
-  ), 0);
+  const cartCount = Object.values(normalizedCart).reduce(
+    (sum, booking) => sum + booking.quantity,
+    0,
+  );
+  const cartTotal = Object.values(normalizedCart).reduce((sum, booking) => {
+    const trip = trips[booking.productId];
+    return trip ? sum + bookingTotal(trip, booking) : sum;
+  }, 0);
 
-  const addToCart = id => {
-    setCart(c => ({ ...c, [id]: (c[id] || 0) + 1 }));
+  useEffect(() => {
+    if (Object.values(cart).some(value => typeof value === 'number')) {
+      setCart(normalizedCart);
+    }
+  }, [cart, normalizedCart, setCart]);
+
+  const addToCart = (id, options) => {
+    const booking = { productId: id, ...options };
+    const key = bookingKey(booking);
+    const existingQuantity = normalizedCart[key]?.quantity ?? 0;
+    if (existingQuantity + booking.quantity > 10) {
+      showAviso('No se pueden reservar más de 10 viajeros por reserva.');
+      return;
+    }
+    setCart(current => {
+      const next = normalizeCart(current, trips);
+      const existing = next[key];
+      return { ...next, [key]: { ...booking, quantity: (existing?.quantity ?? 0) + booking.quantity } };
+    });
     showAviso(`${trips[id].name} agregado al carrito`);
   };
 
-  const changeQuantity = (id, amount) => {
+  const changeQuantity = (key, amount) => {
+    const currentBooking = normalizedCart[key];
+    if (currentBooking && currentBooking.quantity + amount > 10) {
+      showAviso('No se pueden reservar más de 10 viajeros por reserva.');
+      return;
+    }
     setCart(c => {
-      const next = { ...c, [id]: (c[id] || 0) + amount };
-      if (next[id] <= 0) delete next[id];
+      const next = normalizeCart(c, trips);
+      const booking = next[key];
+      if (!booking) return next;
+      const quantity = booking.quantity + amount;
+      if (quantity <= 0) delete next[key];
+      else next[key] = { ...booking, quantity };
       return next;
     });
   };
 
-  const removeFromCart = id => {
+  const removeFromCart = key => {
     setCart(c => {
-      const next = { ...c };
-      delete next[id];
+      const next = normalizeCart(c, trips);
+      delete next[key];
       return next;
     });
   };
@@ -170,9 +234,12 @@ export default function App() {
     setPaymentBusy(true);
     setPaymentError('');
     try {
-      const checkout = await api.createCheckout(token, Object.entries(cart).map(([productId, quantity]) => ({
-        productId,
-        quantity,
+      const checkout = await api.createCheckout(token, Object.values(normalizedCart).map(booking => ({
+        productId: booking.productId,
+        quantity: booking.quantity,
+        serviceType: booking.serviceType,
+        departureDate: booking.departureDate,
+        days: booking.days,
       })));
       window.location.assign(checkout.checkoutUrl);
     } catch (error) {
@@ -210,7 +277,7 @@ export default function App() {
 
       {cartOpen && (
         <Carrito
-          cart={cart}
+          cart={normalizedCart}
           trips={trips}
           total={cartTotal}
           onClose={() => setCartOpen(false)}
@@ -232,7 +299,7 @@ export default function App() {
 
       {paymentOpen && (
         <Pago
-          cart={cart}
+          cart={normalizedCart}
           trips={trips}
           total={cartTotal}
           busy={paymentBusy}
