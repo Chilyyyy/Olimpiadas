@@ -3,7 +3,6 @@ import { useState } from 'react';
 import {
   bookingTotal,
   bookingTypes,
-  extraPassengerDailyRate,
   money,
   todayArgentinaDate,
 } from '../datos.js';
@@ -18,6 +17,8 @@ export default function Viaje({ trip, onAdd }) {
     days: Number(days) || trip.days,
     quantity: Number(quantity) || 1,
   };
+
+  const total = bookingTotal(trip, booking);
 
   return (
     <article className="trip-card">
@@ -51,10 +52,11 @@ export default function Viaje({ trip, onAdd }) {
           className="booking-options"
           onSubmit={event => {
             event.preventDefault();
+
             onAdd(trip.id, {
               serviceType,
               departureDate,
-              ...booking
+              ...booking,
             });
           }}
         >
@@ -68,4 +70,54 @@ export default function Viaje({ trip, onAdd }) {
               {bookingTypes.map(type => (
                 <option key={type.id} value={type.id}>
                   {type.label}
-                </
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="booking-field">
+            <span>Fecha de salida</span>
+
+            <input
+              type="date"
+              value={departureDate}
+              onChange={event => setDepartureDate(event.target.value)}
+              min={todayArgentinaDate}
+            />
+          </label>
+
+          <label className="booking-field">
+            <span>Días</span>
+
+            <input
+              type="number"
+              min="1"
+              value={days}
+              onChange={event => setDays(event.target.value)}
+            />
+          </label>
+
+          <label className="booking-field">
+            <span>Pasajeros</span>
+
+            <input
+              type="number"
+              min="1"
+              value={quantity}
+              onChange={event => setQuantity(event.target.value)}
+            />
+          </label>
+
+          <div className="booking-total">
+            <span>Total estimado</span>
+            <strong>{money(total)}</strong>
+          </div>
+
+          <button className="add-btn" type="submit">
+            + Agregar
+          </button>
+        </form>
+      </div>
+    </article>
+  );
+}
