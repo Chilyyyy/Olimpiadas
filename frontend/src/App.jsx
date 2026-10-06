@@ -75,11 +75,18 @@ export default function App() {
 
   useEffect(() => {
     let active = true;
+
     api.getProducts().then(products => {
       if (!active || products.length === 0) return;
 
+      const productsWithPhotos = products.map(trip => ({
+        ...trip,
+        photo: sampleTrips[trip.id]?.photo ?? trip.photo,
+      }));
+
       const groups = new Map();
-      products.forEach(trip => {
+
+      productsWithPhotos.forEach(trip => {
         if (!groups.has(trip.num)) {
           groups.set(trip.num, {
             num: trip.num,
@@ -89,14 +96,18 @@ export default function App() {
             trips: [],
           });
         }
+
         groups.get(trip.num).trips.push(trip);
       });
 
       setSlides([...groups.values()]);
-      setTrips(Object.fromEntries(products.map(trip => [trip.id, trip])));
+      setTrips(Object.fromEntries(
+        productsWithPhotos.map(trip => [trip.id, trip])
+      ));
     }).catch(() => {
       if (active) showAviso('No se pudo conectar con el servidor. Se muestran viajes de ejemplo.');
     });
+
     return () => { active = false; };
   }, [showAviso]);
 
@@ -151,6 +162,7 @@ export default function App() {
     (sum, booking) => sum + booking.quantity,
     0,
   );
+
   const cartTotal = Object.values(normalizedCart).reduce((sum, booking) => {
     const trip = trips[booking.productId];
     return trip ? sum + bookingTotal(trip, booking) : sum;
@@ -166,31 +178,46 @@ export default function App() {
     const booking = { productId: id, ...options };
     const key = bookingKey(booking);
     const existingQuantity = normalizedCart[key]?.quantity ?? 0;
+
     if (existingQuantity + booking.quantity > 10) {
       showAviso('No se pueden reservar más de 10 viajeros por reserva.');
       return;
     }
+
     setCart(current => {
       const next = normalizeCart(current, trips);
       const existing = next[key];
-      return { ...next, [key]: { ...booking, quantity: (existing?.quantity ?? 0) + booking.quantity } };
+      return {
+        ...next,
+        [key]: {
+          ...booking,
+          quantity: (existing?.quantity ?? 0) + booking.quantity,
+        },
+      };
     });
+
     showAviso(`${trips[id].name} agregado al carrito`);
   };
 
   const changeQuantity = (key, amount) => {
     const currentBooking = normalizedCart[key];
+
     if (currentBooking && currentBooking.quantity + amount > 10) {
       showAviso('No se pueden reservar más de 10 viajeros por reserva.');
       return;
     }
+
     setCart(c => {
       const next = normalizeCart(c, trips);
       const booking = next[key];
+
       if (!booking) return next;
+
       const quantity = booking.quantity + amount;
+
       if (quantity <= 0) delete next[key];
       else next[key] = { ...booking, quantity };
+
       return next;
     });
   };
@@ -203,16 +230,24 @@ export default function App() {
     });
   };
 
-  const clearCart = () => { setCart({}); showAviso('Carrito vacío'); };
+  const clearCart = () => {
+    setCart({});
+    showAviso('Carrito vacío');
+  };
 
   const checkout = () => {
-    if (!cartCount) { showAviso('Agregá al menos un viaje al carrito.'); return; }
+    if (!cartCount) {
+      showAviso('Agregá al menos un viaje al carrito.');
+      return;
+    }
+
     if (!user) {
       setCartOpen(false);
       setAccountOpen(true);
       showAviso('Para pagar necesitás una cuenta.');
       return;
     }
+
     setPaymentOpen(true);
   };
 
@@ -228,36 +263,45 @@ export default function App() {
     const session = await api.login({ email, password });
     setToken(session.token);
     setUser(session.user);
+
     later(() => {
       setAccountOpen(false);
       setManagerLoginOpen(false);
     }, 500);
+
     showAviso('Sesión iniciada correctamente');
   };
 
   const handleManagerLogin = async (email, password) => {
     const session = await api.login({ email, password });
+
     if (session.user.role !== 'jefe_ventas') {
       throw new Error('Esta cuenta no tiene permisos de jefe de ventas.');
     }
+
     setToken(session.token);
     setUser(session.user);
+
     later(() => {
       setAccountOpen(false);
       setManagerLoginOpen(false);
     }, 500);
+
     showAviso('Sesión de jefe de ventas iniciada.');
   };
 
   const addPublishedProduct = product => {
     setTrips(current => ({ ...current, [product.id]: product }));
+
     setSlides(current => {
       const existing = current.some(slide => slide.num === product.num);
+
       if (existing) {
         return current.map(slide => slide.num === product.num
           ? { ...slide, trips: [...slide.trips, product] }
           : slide);
       }
+
       return [...current, {
         num: product.num,
         title: product.category,
@@ -278,14 +322,19 @@ export default function App() {
   const finishPayment = async () => {
     setPaymentBusy(true);
     setPaymentError('');
+
     try {
-      const checkout = await api.createCheckout(token, Object.values(normalizedCart).map(booking => ({
-        productId: booking.productId,
-        quantity: booking.quantity,
-        serviceType: booking.serviceType,
-        departureDate: booking.departureDate,
-        days: booking.days,
-      })));
+      const checkout = await api.createCheckout(
+        token,
+        Object.values(normalizedCart).map(booking => ({
+          productId: booking.productId,
+          quantity: booking.quantity,
+          serviceType: booking.serviceType,
+          departureDate: booking.departureDate,
+          days: booking.days,
+        })),
+      );
+
       window.location.assign(checkout.checkoutUrl);
     } catch (error) {
       if (error.status === 401) {
@@ -296,6 +345,7 @@ export default function App() {
         showAviso('La sesión venció. Inicia sesión otra vez para pagar.');
         return;
       }
+
       setPaymentError(error.message);
     } finally {
       setPaymentBusy(false);
