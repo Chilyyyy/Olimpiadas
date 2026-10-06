@@ -21,9 +21,7 @@ Para usar el **panel de ventas**, primero creamos una cuenta normal desde la pá
 
 ```sql
 UPDATE usuarios SET rol = 'jefe_ventas'
-WHERE email = 'correo@ejemplo.com';
+WHERE email = 'ventas@olimpiadas-programacion2026.onrender.com';
 ```
 
 Después cerramos sesión y volvemos a entrar. Con eso ya podemos entrar al panel y **ver las ventas, entregar pedidos o anularlos**.
-
-**Importante:** no subir el archivo `.env` a GitHub porque tiene datos privados.
