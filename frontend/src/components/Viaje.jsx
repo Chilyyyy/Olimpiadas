@@ -1,5 +1,4 @@
-// Una tarjetita de viaje.
-import { useState } from 'react';
+import React, { useState } from 'react';
 import {
   bookingTotal,
   bookingTypes,
@@ -14,8 +13,8 @@ export default function Viaje({ trip, onAdd }) {
   const [quantity, setQuantity] = useState('1');
 
   const booking = {
-    days: Number(days) || trip.days,
-    quantity: Number(quantity) || 1,
+    days: Number(days),
+    quantity: Number(quantity)
   };
 
   const total = bookingTotal(trip, booking);
@@ -82,7 +81,8 @@ export default function Viaje({ trip, onAdd }) {
               type="date"
               value={departureDate}
               onChange={event => setDepartureDate(event.target.value)}
-              min={todayArgentinaDate}
+              min={todayArgentinaDate()}
+              required
             />
           </label>
 
@@ -92,6 +92,8 @@ export default function Viaje({ trip, onAdd }) {
             <input
               type="number"
               min="1"
+              max="365"
+              required
               value={days}
               onChange={event => setDays(event.target.value)}
             />
@@ -103,6 +105,8 @@ export default function Viaje({ trip, onAdd }) {
             <input
               type="number"
               min="1"
+              max="10"
+              required
               value={quantity}
               onChange={event => setQuantity(event.target.value)}
             />

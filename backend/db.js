@@ -7,9 +7,9 @@ dotenv.config({ path: fileURLToPath(new URL('./.env', import.meta.url)) })
 
 // Quita los signos ´ que están al inicio y al final de algunos valores.
 const unwrap = (value) => value?.replace(/^´|´$/g, '')
-const password = unwrap(process.env.DATABASE_PASSWORD ?? process.env.VITE_DB_PASSWORD)
-const urlTemplate = unwrap(process.env.DATABASE_URL ?? process.env.VITE_DB_URL)
-const passwordPlaceholder = '${VITE_DB_PASSWORD}'
+const password = unwrap(process.env.DATABASE_PASSWORD)
+const urlTemplate = unwrap(process.env.DATABASE_URL)
+const passwordPlaceholder = '${DATABASE_PASSWORD}'
 
 if (!urlTemplate) {
   throw new Error('Falta DATABASE_URL en backend/.env')

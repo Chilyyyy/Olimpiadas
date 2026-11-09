@@ -189,3 +189,14 @@ export const services = [
 
 // Formatea precios con los separadores usados en Argentina.
 export const money = value => '$' + value.toLocaleString('es-AR');
+
+export const photosByCountry = {
+  'Japón': tokio,
+  'Corea del Sur': seul,
+  'Italia': roma,
+  'Grecia': atenas,
+  'Egipto': egipto,
+  'Perú': cusco,
+  'Brasil': rio,
+  'México': cancun,
+};
