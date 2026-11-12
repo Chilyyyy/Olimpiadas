@@ -1,11 +1,10 @@
-
 services:
   - type: web
     name: horizonte-travel
     runtime: node
     plan: free
 
-    buildCommand: npm ci && npm run build
+    buildCommand: npm ci --include=dev && npm run build
     startCommand: npm start
 
     healthCheckPath: /api/health
@@ -19,7 +18,7 @@ services:
 
       - key: DATABASE_URL
         sync: false
-        
+
       - key: DATABASE_PASSWORD
         sync: false
 
