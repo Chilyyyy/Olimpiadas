@@ -1,0 +1,37 @@
+{
+  "name": "olimpiadas",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "concurrently -k -n BACKEND,FRONTEND \"npm:dev:backend\" \"npm:dev:frontend\"",
+    "dev:backend": "node --watch backend/server.js",
+    "dev:frontend": "vite frontend --config frontend/vite.config.js --host 0.0.0.0 --port 3000",
+    "start": "node backend/server.js",
+    "build": "vite build frontend --config frontend/vite.config.js",
+    "preview": "vite preview frontend --config frontend/vite.config.js --host 0.0.0.0 --port 3000",
+    "lint": "oxlint frontend"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^5.1.0",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "mercadopago": "^3.6.1",
+    "nodemailer": "^10.0.14",
+    "pg": "^8.16.3",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^6.1.1",
+    "concurrently": "^9.2.1",
+    "oxlint": "^1.81.0",
+    "vite": "^8.3.0"
+  }
+}

@@ -1,27 +1,42 @@
+
 services:
   - type: web
     name: horizonte-travel
     runtime: node
     plan: free
-    buildCommand: npm ci --prefix frontend && npm ci --prefix backend && npm run build --prefix frontend
-    startCommand: npm start --prefix backend
+
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+
     healthCheckPath: /api/health
+
     envVars:
       - key: NODE_ENV
         value: production
+
       - key: JWT_SECRET
         generateValue: true
+
       - key: DATABASE_URL
         sync: false
+        
+      - key: DATABASE_PASSWORD
+        sync: false
+
       - key: MERCADO_PAGO_ACCESS_TOKEN
         sync: false
+
       - key: SMTP_HOST
         sync: false
+
       - key: SMTP_PORT
         value: "587"
+
       - key: SMTP_USER
         sync: false
+
       - key: SMTP_PASS
         sync: false
+
       - key: SMTP_FROM
         sync: false
